@@ -1,0 +1,8 @@
+[package]
+name = "cellular_rustomata"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+nalgebra = "0.32.4"
+time = "0.3.34"
