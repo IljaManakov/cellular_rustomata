@@ -1,14 +1,9 @@
 use nalgebra::{DMatrix, Dyn, MatrixView, OMatrix};
+pub mod renderer;
 
-// #[derive(Debug)]
-// pub struct Cell{
-//     pub state: Vec<f32>,
-//     pub position: Vec<i32>,
-//     pub neighbors: Vec<Cell>
-// }
-
-type Neighbourhood<'a> = MatrixView<'a, f32, Dyn, Dyn>;
-type Rule = fn(&Neighbourhood) -> Option<f32>;
+type CellStateType = u8;
+type Neighbourhood<'a> = MatrixView<'a, CellStateType, Dyn, Dyn>;
+type Rule = fn(&Neighbourhood) -> Option<CellStateType>;
 
 #[derive(Debug)]
 pub enum RetrievalMode {
@@ -18,7 +13,7 @@ pub enum RetrievalMode {
 
 #[derive(Debug)]
 pub struct Engine {
-    pub grid: OMatrix<f32, Dyn, Dyn>,
+    pub grid: OMatrix<CellStateType, Dyn, Dyn>,
     pub rules: Vec<Rule>,
     neighbourhood_shape: [usize; 2],
     pub retrieval_mode: RetrievalMode,
@@ -43,7 +38,7 @@ impl Engine {
     /// ```
     ///
     /// ```
-    pub fn new(grid: OMatrix<f32, Dyn, Dyn>,
+    pub fn new(grid: OMatrix<CellStateType, Dyn, Dyn>,
                rules: Vec<Rule>,
                neighbourhood_shape: [usize; 2],
                retrieval_mode: RetrievalMode) -> Result<Engine, String> {
@@ -61,11 +56,11 @@ impl Engine {
         Ok(Engine { grid, rules, neighbourhood_shape, retrieval_mode, neighbourhood_indices: [row_indices, col_indices] })
     }
 
-    pub fn get_neighbourhood(&self, index: &[usize; 2]) -> OMatrix<f32, Dyn, Dyn> {
+    pub fn get_neighbourhood(&self, index: &[usize; 2]) -> OMatrix<CellStateType, Dyn, Dyn> {
         self._get_neighbourhood_from_view(index).unwrap_or(self._get_neighbourhood_from_indices(index))
     }
 
-    fn _get_neighbourhood_from_view(&self, index: &[usize; 2]) -> Option<OMatrix<f32, Dyn, Dyn>> {
+    fn _get_neighbourhood_from_view(&self, index: &[usize; 2]) -> Option<OMatrix<CellStateType, Dyn, Dyn>> {
         let (half_width, half_height) = (self.neighbourhood_shape[0] / 2, self.neighbourhood_shape[1] / 2);
         if index[0] + half_width > self.grid.ncols() || index[0] + half_width > self.grid.nrows() {
             return None;
@@ -80,24 +75,24 @@ impl Engine {
         Some(self.grid.view((start[0], start[1]), self.neighbourhood_shape.into()).clone_owned())
     }
 
-    fn _get_neighbourhood_from_indices(&self, index: &[usize; 2]) -> OMatrix<f32, Dyn, Dyn> {
+    fn _get_neighbourhood_from_indices(&self, index: &[usize; 2]) -> OMatrix<CellStateType, Dyn, Dyn> {
         let (row_indices, col_indices) = (
             self.neighbourhood_indices[0].add_scalar(index[0] as i32),
             self.neighbourhood_indices[1].add_scalar(index[1] as i32)
         );
 
-        let mut ret: OMatrix<f32, Dyn, Dyn> = DMatrix::zeros(self.neighbourhood_shape[0], self.neighbourhood_shape[1]);
+        let mut ret: OMatrix<CellStateType, Dyn, Dyn> = DMatrix::zeros(self.neighbourhood_shape[0], self.neighbourhood_shape[1]);
         for (row, (i, column)) in row_indices.iter().zip(col_indices.iter().enumerate()) {
             *ret.index_mut(i) = self._get_from_grid(*row, *column);
         }
         ret
     }
 
-    fn _get_from_grid(&self, mut row: i32, mut col: i32) -> f32 {
+    fn _get_from_grid(&self, mut row: i32, mut col: i32) -> CellStateType {
         let (nrows, ncols) = (self.grid.nrows(), self.grid.ncols());
 
         match self.retrieval_mode {
-            RetrievalMode::Padded => if row < 0 || row > nrows as i32 || col < 0 || col > ncols as i32 { return 0f32; }
+            RetrievalMode::Padded => if row < 0 || row > nrows as i32 || col < 0 || col > ncols as i32 { return 0 as CellStateType; }
             RetrievalMode::Wrapping => {
                 row = if row < 0 { nrows as i32 + row } else { row % nrows as i32 };
                 col = if col < 0 { ncols as i32 + col } else { col % ncols as i32 };
@@ -108,10 +103,10 @@ impl Engine {
 }
 
 impl Iterator for Engine {
-    type Item = OMatrix<f32, Dyn, Dyn>;
+    type Item = OMatrix<CellStateType, Dyn, Dyn>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let ret = self.grid.clone();
-        Some(ret.add_scalar(1.0))
+        Some(ret.add_scalar(1.0 as CellStateType))
     }
 }
