@@ -1,10 +1,11 @@
 extern crate sdl2;
 
-use std::{thread, time::Duration};
+use rand::Rng;
+use std::{time::Duration};
 
 use nalgebra::*;
 
-use cellular_rustomata::{Engine, RetrievalMode};
+use cellular_rustomata::{Engine, RetrievalMode, Neighborhood, CellStateType};
 use cellular_rustomata::renderer::Renderer;
 
 use sdl2::pixels::Color;
@@ -23,18 +24,18 @@ fn test_neighborhood() {
                                            7, 8, 9, 0, 10,
                                        ],
     );
-    let engine = Engine::new(grid.into(), vec![], [3, 3], RetrievalMode::Wrapping).unwrap();
+    // let engine = Engine::new(grid.into(), vec![], [3, 3], RetrievalMode::Wrapping).unwrap();
     // for (index, updated) in (0..10).zip(engine) {
     //     print!("\x1b[;H");
     //         println!("{}",updated);
     //         thread::sleep(time::Duration::from_millis(500));
     // }
-    print!("\x1b[;H");
-    println!("{}", engine.get_neighbourhood(&[0, 0]));
-    print!("\x1b[;H");
-    println!("{}", engine.get_neighbourhood(&[0, 1]));
-    print!("\x1b[;H");
-    println!("{}", engine.get_neighbourhood(&[2, 2]));
+    // print!("\x1b[;H");
+    // println!("{}", engine.get_neighbourhood(&[0, 0]));
+    // print!("\x1b[;H");
+    // println!("{}", engine.get_neighbourhood(&[0, 1]));
+    // print!("\x1b[;H");
+    // println!("{}", engine.get_neighbourhood(&[2, 2]));
 }
 pub fn sdl_test() {
     let sdl_context = sdl2::init().unwrap();
@@ -79,15 +80,28 @@ pub fn sdl_test() {
 
 pub fn main(){
     let mut renderer = Renderer::new(640, 640).unwrap();
-     let grid = DMatrix::from_row_slice(5, 5,
-                                       &[
-                                           10, 20, 30, 0, 100,
-                                           40, 50, 60, 0, 100,
-                                           70, 80, 90, 0, 100,
-                                           10, 20, 30, 0, 100,
-                                           70, 80, 90, 0, 100,
-                                       ],
-    );
-    renderer.draw(&grid);
-    thread::sleep(Duration::from_secs(2));
+     // let grid = DMatrix::from_row_slice(5, 5,
+     //                                   &[
+     //                                       10, 20, 30, 0, 100,
+     //                                       40, 50, 60, 0, 100,
+     //                                       70, 80, 90, 0, 100,
+     //                                       10, 20, 30, 0, 100,
+     //                                       70, 80, 90, 0, 100,
+     //                                   ],
+    // );
+    let mut rng = rand::rng();
+    let grid = DMatrix::from_fn(128, 128, |_, _| rng.random_range(0..=1));
+    let rules = vec![
+      |n: &Neighborhood, s: &CellStateType| { if n.iter().sum::<CellStateType>() - s < 2 {Some(0)} else {None}},
+      |n: &Neighborhood, s: &CellStateType| { if n.iter().sum::<CellStateType>() - s == 3 {Some(1)} else {None}},
+      |n: &Neighborhood, s: &CellStateType| { if n.iter().sum::<CellStateType>() - s > 3 {Some(0)} else {None}},
+    ];
+    let mut engine = Engine::new(grid, rules, [3, 3], RetrievalMode::Wrapping).unwrap();
+
+    renderer.draw(&engine.grid);
+
+    loop {
+        engine.step();
+        renderer.draw(&engine.grid);
+    }
 }
