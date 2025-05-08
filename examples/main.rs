@@ -79,16 +79,6 @@ pub fn sdl_test() {
 }
 
 pub fn main(){
-    let mut renderer = Renderer::new(640, 640).unwrap();
-     // let grid = DMatrix::from_row_slice(5, 5,
-     //                                   &[
-     //                                       10, 20, 30, 0, 100,
-     //                                       40, 50, 60, 0, 100,
-     //                                       70, 80, 90, 0, 100,
-     //                                       10, 20, 30, 0, 100,
-     //                                       70, 80, 90, 0, 100,
-     //                                   ],
-    // );
     let mut rng = rand::rng();
     let grid = DMatrix::from_fn(128, 128, |_, _| rng.random_range(0..=1));
     let rules = vec![
@@ -96,12 +86,7 @@ pub fn main(){
       |n: &Neighborhood, s: &CellStateType| { if n.iter().sum::<CellStateType>() - s == 3 {Some(1)} else {None}},
       |n: &Neighborhood, s: &CellStateType| { if n.iter().sum::<CellStateType>() - s > 3 {Some(0)} else {None}},
     ];
-    let mut engine = Engine::new(grid, rules, [3, 3], RetrievalMode::Wrapping).unwrap();
-
-    renderer.draw(&engine.grid);
-
-    loop {
-        engine.step();
-        renderer.draw(&engine.grid);
-    }
+    let engine = Engine::new(grid, rules, [3, 3], RetrievalMode::Wrapping).unwrap();
+    let mut renderer = Renderer::new(640, 640, engine).unwrap();
+    renderer.start_loop(60);
 }
