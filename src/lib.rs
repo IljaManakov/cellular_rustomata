@@ -1,6 +1,7 @@
-use nalgebra::{Const, DMatrix, Dyn, MatrixView, OMatrix, VecStorage, ViewStorage};
-use nalgebra::iter::MatrixIter;
 use crate::Neighborhood::{Owned, View};
+use nalgebra::iter::MatrixIter;
+use nalgebra::{Const, DMatrix, Dyn, MatrixView, OMatrix, VecStorage, ViewStorage};
+use sdl2::sys::False;
 
 pub mod renderer;
 
@@ -13,7 +14,7 @@ pub enum Neighborhood<'a> {
 
 pub enum NeighborhoodIter<'a> {
     View(MatrixIter<'a, CellStateType, Dyn, Dyn, ViewStorage<'a, CellStateType, Dyn, Dyn, Const<1>, Dyn>>),
-    Owned(MatrixIter<'a, CellStateType, Dyn, Dyn, VecStorage<CellStateType, Dyn, Dyn>>)
+    Owned(MatrixIter<'a, CellStateType, Dyn, Dyn, VecStorage<CellStateType, Dyn, Dyn>>),
 }
 
 impl Neighborhood<'_> {
@@ -27,7 +28,7 @@ impl Neighborhood<'_> {
 
 impl<'a> Iterator for NeighborhoodIter<'a> {
     type Item = &'a CellStateType;
-    
+
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             NeighborhoodIter::Owned(iterator) => iterator.next(),
@@ -51,8 +52,8 @@ pub struct Engine {
     neighbourhood_shape: [usize; 2],
     pub retrieval_mode: RetrievalMode,
     neighbourhood_indices: [OMatrix<i32, Dyn, Dyn>; 2],
+    pub paused: bool,
 }
-
 
 impl Engine {
     ///
@@ -71,10 +72,12 @@ impl Engine {
     /// ```
     ///
     /// ```
-    pub fn new(grid: OMatrix<CellStateType, Dyn, Dyn>,
-               rules: Vec<Rule>,
-               neighbourhood_shape: [usize; 2],
-               retrieval_mode: RetrievalMode) -> Result<Engine, String> {
+    pub fn new(
+        grid: OMatrix<CellStateType, Dyn, Dyn>,
+        rules: Vec<Rule>,
+        neighbourhood_shape: [usize; 2],
+        retrieval_mode: RetrievalMode,
+    ) -> Result<Engine, String> {
         if grid.nrows() <= neighbourhood_shape[0] || grid.ncols() <= neighbourhood_shape[1] {
             return Err("neighbourhood shape must be strictly smaller than the grid shape".to_string());
         }
@@ -86,11 +89,19 @@ impl Engine {
         row_indices = row_indices.add_scalar(-(neighbourhood_shape[0] as i32 / 2));
         col_indices = col_indices.add_scalar(-(neighbourhood_shape[1] as i32 / 2));
 
-        Ok(Engine { grid, rules, neighbourhood_shape, retrieval_mode, neighbourhood_indices: [row_indices, col_indices] })
+        Ok(Engine {
+            grid,
+            rules,
+            neighbourhood_shape,
+            retrieval_mode,
+            neighbourhood_indices: [row_indices, col_indices],
+            paused: false,
+        })
     }
 
     pub fn get_neighbourhood(&self, index: &[usize; 2]) -> Neighborhood {
-        self._get_neighbourhood_from_view(index).unwrap_or(self._get_neighbourhood_from_indices(index))
+        self._get_neighbourhood_from_view(index)
+            .unwrap_or(self._get_neighbourhood_from_indices(index))
     }
 
     fn _get_neighbourhood_from_view(&self, index: &[usize; 2]) -> Option<Neighborhood> {
@@ -106,17 +117,18 @@ impl Engine {
             .collect::<Option<Vec<usize>>>()?;
 
         Some(Neighborhood::View(
-            self.grid.view((start[0], start[1]), self.neighbourhood_shape.into()))
-        )
+            self.grid.view((start[0], start[1]), self.neighbourhood_shape.into()),
+        ))
     }
 
     fn _get_neighbourhood_from_indices(&self, index: &[usize; 2]) -> Neighborhood {
         let (row_indices, col_indices) = (
             self.neighbourhood_indices[0].add_scalar(index[0] as i32),
-            self.neighbourhood_indices[1].add_scalar(index[1] as i32)
+            self.neighbourhood_indices[1].add_scalar(index[1] as i32),
         );
 
-        let mut ret: OMatrix<CellStateType, Dyn, Dyn> = DMatrix::zeros(self.neighbourhood_shape[0], self.neighbourhood_shape[1]);
+        let mut ret: OMatrix<CellStateType, Dyn, Dyn> =
+            DMatrix::zeros(self.neighbourhood_shape[0], self.neighbourhood_shape[1]);
         for (row, (i, column)) in row_indices.iter().zip(col_indices.iter().enumerate()) {
             *ret.index_mut(i) = self._get_from_grid(*row, *column);
         }
@@ -127,19 +139,35 @@ impl Engine {
         let (nrows, ncols) = (self.grid.nrows(), self.grid.ncols());
 
         match self.retrieval_mode {
-            RetrievalMode::Padded => if row < 0 || row > nrows as i32 || col < 0 || col > ncols as i32 { return 0 as CellStateType; }
+            RetrievalMode::Padded => {
+                if row < 0 || row > nrows as i32 || col < 0 || col > ncols as i32 {
+                    return 0 as CellStateType;
+                }
+            }
             RetrievalMode::Wrapping => {
-                row = if row < 0 { nrows as i32 + row } else { row % nrows as i32 };
-                col = if col < 0 { ncols as i32 + col } else { col % ncols as i32 };
+                row = if row < 0 {
+                    nrows as i32 + row
+                } else {
+                    row % nrows as i32
+                };
+                col = if col < 0 {
+                    ncols as i32 + col
+                } else {
+                    col % ncols as i32
+                };
             }
         }
         self.grid[(row as usize, col as usize)]
     }
-    
-     pub fn step(&mut self) {
+
+    pub fn step(&mut self) {
+        if self.paused {
+            return;
+        }
+
         let mut ret = self.grid.clone();
-        for i in 0..self.grid.ncols() - 1{
-            for j in 0..self.grid.nrows() - 1{
+        for i in 0..self.grid.ncols() - 1 {
+            for j in 0..self.grid.nrows() - 1 {
                 let neighbourhood = self.get_neighbourhood(&[i, j]);
                 for rule in &self.rules {
                     match rule(&neighbourhood, &self.grid[(i, j)]) {
