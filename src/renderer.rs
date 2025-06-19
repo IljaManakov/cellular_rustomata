@@ -1,5 +1,7 @@
-use crate::Engine;
-use colorous::INFERNO;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use crate::{CellStateType, Engine};
+use colorous::{Gradient, INFERNO};
 use sdl2;
 use sdl2::EventPump;
 use sdl2::event::Event;
@@ -11,7 +13,7 @@ use sdl2::video::Window;
 use std::time::{Duration, Instant};
 
 #[derive(Default)]
-pub struct FPSCounter {
+struct FPSCounter {
     frame_count: u32,
     last_time: Option<Instant>,
 }
@@ -34,11 +36,34 @@ impl FPSCounter {
     }
 }
 
+struct ColorMap {
+    colors: Gradient,
+    map: RefCell<HashMap<CellStateType, Color>>,
+}
+
+impl ColorMap {
+    
+    pub fn new(gradient: Gradient) -> Self {
+        ColorMap{colors: gradient, map: RefCell::new(HashMap::new())}
+    }
+    
+    pub fn to_color(&self, value: CellStateType) -> Color {
+
+        self.map.borrow_mut().entry(value).or_insert_with(
+            || {
+                let (r, g, b) = self.colors.eval_rational(value as usize, 2).as_tuple();
+                Color::RGB(r, g, b)
+            }
+        ).clone()
+    }
+}
+
 pub struct Renderer {
     canvas: Canvas<Window>,
     events: EventPump,
     cell_engine: Engine,
     fps: Option<FPSCounter>,
+    color_map: ColorMap,
 }
 
 impl Renderer {
@@ -57,6 +82,7 @@ impl Renderer {
             events,
             cell_engine,
             fps: None,
+            color_map: ColorMap::new(INFERNO),
         })
     }
     fn draw(&mut self) {
@@ -70,8 +96,7 @@ impl Renderer {
         for i in 0..grid.nrows() {
             for j in 0..grid.ncols() {
                 let value = grid[(i, j)];
-                let (r, g, b) = INFERNO.eval_rational(value as usize, 2).as_tuple();
-                self.canvas.set_draw_color(Color::RGB(r, g, b));
+                self.canvas.set_draw_color(self.color_map.to_color(value).clone());
                 self.canvas.draw_point(Point::new(j as i32, i as i32)).unwrap();
             }
         }
@@ -115,7 +140,6 @@ impl Renderer {
     }
 
     pub fn start_loop(&mut self, fps: u32) {
-        println!("Starting loop");
         self.cell_engine.paused = true;
         'main: loop {
             self.cell_engine.step();
