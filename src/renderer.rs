@@ -1,15 +1,15 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
 use crate::{CellStateType, Engine};
 use colorous::{Gradient, INFERNO};
 use sdl2;
-use sdl2::EventPump;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::Point;
 use sdl2::render::Canvas;
 use sdl2::video::Window;
+use sdl2::EventPump;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 #[derive(Default)]
@@ -42,19 +42,22 @@ struct ColorMap {
 }
 
 impl ColorMap {
-    
     pub fn new(gradient: Gradient) -> Self {
-        ColorMap{colors: gradient, map: RefCell::new(HashMap::new())}
+        ColorMap {
+            colors: gradient,
+            map: RefCell::new(HashMap::new()),
+        }
     }
-    
-    pub fn to_color(&self, value: CellStateType) -> Color {
 
-        self.map.borrow_mut().entry(value).or_insert_with(
-            || {
+    pub fn to_color(&self, value: CellStateType) -> Color {
+        self.map
+            .borrow_mut()
+            .entry(value)
+            .or_insert_with(|| {
                 let (r, g, b) = self.colors.eval_rational(value as usize, 2).as_tuple();
                 Color::RGB(r, g, b)
-            }
-        ).clone()
+            })
+            .clone()
     }
 }
 
@@ -150,7 +153,7 @@ impl Renderer {
             if self.handle_events().is_some() {
                 break 'main;
             };
-            std::thread::sleep(Duration::new(0, 100_000_000_u32 / fps));
+            std::thread::sleep(Duration::new(0, 1_000_000_000_u32 / fps));
         }
     }
 }
