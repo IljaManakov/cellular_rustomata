@@ -14,17 +14,17 @@ use std::time::{Duration, Instant};
 
 #[derive(Default)]
 struct FPSCounter {
-    frame_count: u32,
+    pub frame_count: u32,
     last_time: Option<Instant>,
 }
 
 impl FPSCounter {
-    pub fn call(&mut self) {
+    pub fn call(&mut self, window: &mut Window) {
         self.frame_count += 1;
         match self.last_time {
             Some(last_time) => {
                 if last_time.elapsed() > Duration::from_secs(1) {
-                    println!("FPS: {}", self.frame_count);
+                    window.set_title(&format!("FPS: {}", self.frame_count)).unwrap();
                     self.frame_count = 0;
                     self.last_time = Some(Instant::now());
                 }
@@ -62,6 +62,7 @@ impl ColorMap {
 }
 
 pub struct Renderer {
+    window: Window,
     canvas: Canvas<Window>,
     events: EventPump,
     cell_engine: Engine,
@@ -77,10 +78,11 @@ impl Renderer {
             .window("cellular rustomata", width, height)
             .build()
             .map_err(|e| e.to_string())?;
-        let canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
+        let canvas = window.clone().into_canvas().build().map_err(|e| e.to_string())?;
         let events = sdl_context.event_pump()?;
 
         Ok(Renderer {
+            window,
             canvas,
             events,
             cell_engine,
@@ -137,8 +139,8 @@ impl Renderer {
     }
 
     fn show_fps(&mut self) {
-        if self.fps.is_none() {
-            return;
+        if let Some(fps) = &mut self.fps {
+            fps.call(&mut self.window)
         };
     }
 
@@ -147,9 +149,7 @@ impl Renderer {
         'main: loop {
             self.cell_engine.step();
             self.draw();
-            if let Some(fps) = &mut self.fps {
-                fps.call()
-            };
+            self.show_fps();
             if self.handle_events().is_some() {
                 break 'main;
             };
