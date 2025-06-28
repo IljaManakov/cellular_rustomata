@@ -116,11 +116,11 @@ impl Engine {
 
     fn _get_neighbourhood_from_view(&self, index: (usize, usize)) -> Option<Neighborhood> {
         let (half_width, half_height) = (self.neighbourhood_shape.0 / 2, self.neighbourhood_shape.1 / 2);
-        if index.0 + half_width >= self.grid.ncols() || index.1 + half_height >= self.grid.nrows() {
+        if index.0 + half_height >= self.grid.nrows() || index.1 + half_width >= self.grid.ncols() {
             return None;
         }
 
-        let start_index = (index.0.checked_sub(half_width)?, index.1.checked_sub(half_height)?);
+        let start_index = (index.0.checked_sub(half_height)?, index.1.checked_sub(half_width)?);
 
         Some(Neighborhood::View(
             self.grid.view(start_index, self.neighbourhood_shape),
@@ -174,16 +174,16 @@ impl Engine {
         let mut ret = self.grid.clone();
         for i in 0..self.grid.ncols() {
             for j in 0..self.grid.nrows() {
-                let neighbourhood = self.get_neighbourhood((i, j));
+                let neighbourhood = self.get_neighbourhood((j, i));
                 for rule in &self.rules {
-                    match rule(&neighbourhood, &self.grid[(i, j)]) {
+                    match rule(&neighbourhood, &self.grid[(j, i)]) {
                         None => {}
                         Some(val) => {
-                            ret[(i, j)] = val;
+                            ret[(j, i)] = val;
                             break;
                         }
                     }
-                    ret[(i, j)] = self.grid[(i, j)];
+                    ret[(j, i)] = self.grid[(j, i)];
                 }
             }
         }
