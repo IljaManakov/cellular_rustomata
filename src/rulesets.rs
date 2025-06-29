@@ -1,47 +1,83 @@
-use crate::{CellStateType, Neighborhood, Rule};
+use crate::{CellStateType, Neighborhood, Rules};
 
-pub fn game_of_life() -> Vec<Rule> {
-    vec![
-        |n: &Neighborhood, s: &CellStateType| {
-            if n.iter().sum::<CellStateType>() - s < 2 {
-                Some(0)
-            } else {
-                None
-            }
-        },
-        |n: &Neighborhood, s: &CellStateType| {
-            if n.iter().sum::<CellStateType>() - s == 3 {
-                Some(1)
-            } else {
-                None
-            }
-        },
-        |n: &Neighborhood, s: &CellStateType| {
-            if n.iter().sum::<CellStateType>() - s > 3 {
-                Some(0)
-            } else {
-                None
-            }
-        },
-    ]
+#[derive(Debug)]
+pub struct LifeLike {
+    birth: Vec<CellStateType>,
+    survival: Vec<CellStateType>,
 }
 
-#[macro_export]
-macro_rules! maze_generation {
-    ($activate_at:expr, $limits:expr) => {
-        vec![
-            |n: &$crate::Neighborhood, s: &$crate::CellStateType| {
-                let sum = n.iter().sum::<$crate::CellStateType>() - s;
-                if $activate_at.contains(&sum) { Some(1) } else { None }
-            },
-            |n: &$crate::Neighborhood, s: &$crate::CellStateType| {
-                let sum = n.iter().sum::<$crate::CellStateType>() - s;
-                if sum < $limits.0 || sum > $limits.1 {
-                    Some(0)
-                } else {
-                    None
-                }
-            },
-        ]
-    };
+impl LifeLike {
+    pub fn new(birth: Vec<CellStateType>, survival: Vec<CellStateType>) -> Self {
+        LifeLike { birth, survival }
+    }
+}
+
+impl Rules for LifeLike {
+    fn step(&self, neighborhood: &Neighborhood, current_state: CellStateType) -> CellStateType {
+        let sum = neighborhood.iter().sum::<CellStateType>() - current_state;
+        if self.birth.contains(&sum) {
+            return 1 as CellStateType;
+        }
+        if self.survival.contains(&sum) {
+            return current_state;
+        }
+        0 as CellStateType
+    }
+}
+
+#[derive(Debug)]
+pub struct GameOfLife {
+    life_like: LifeLike,
+}
+
+impl GameOfLife {
+    pub fn new() -> Self {
+        GameOfLife {
+            life_like: LifeLike::new(vec![3], vec![2, 3]),
+        }
+    }
+}
+
+impl Rules for GameOfLife {
+    fn step(&self, neighborhood: &Neighborhood, current_state: CellStateType) -> CellStateType {
+        self.life_like.step(neighborhood, current_state)
+    }
+}
+
+#[derive(Debug)]
+pub struct Maze {
+    life_like: LifeLike,
+}
+
+impl Maze {
+    pub fn new() -> Self {
+        Maze {
+            life_like: LifeLike::new(vec![3], vec![1, 2, 3, 4, 5]),
+        }
+    }
+}
+
+impl Rules for Maze {
+    fn step(&self, neighborhood: &Neighborhood, current_state: CellStateType) -> CellStateType {
+        self.life_like.step(neighborhood, current_state)
+    }
+}
+
+#[derive(Debug)]
+pub struct Mazectric {
+    life_like: LifeLike,
+}
+
+impl Mazectric {
+    pub fn new() -> Self {
+        Mazectric {
+            life_like: LifeLike::new(vec![3], vec![1, 2, 3, 4]),
+        }
+    }
+}
+
+impl Rules for Mazectric {
+    fn step(&self, neighborhood: &Neighborhood, current_state: CellStateType) -> CellStateType {
+        self.life_like.step(neighborhood, current_state)
+    }
 }

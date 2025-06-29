@@ -60,10 +60,9 @@ impl<'a> Iterator for NeighborhoodIter<'a> {
     }
 }
 
-// pub trait Rule {
-//     fn apply_to_neighborhood(n :&Neighborhood, s: &CellStateType) -> Option<CellStateType>;
-// }
-pub type Rule = fn(&Neighborhood, &CellStateType) -> Option<CellStateType>;
+pub trait Rules {
+    fn step(&self, neighborhood: &Neighborhood, current_state: CellStateType) -> CellStateType;
+}
 
 #[derive(Debug)]
 pub enum RetrievalMode {
@@ -71,10 +70,9 @@ pub enum RetrievalMode {
     Padded,
 }
 
-#[derive(Debug)]
 pub struct Engine {
     pub grid: OMatrix<CellStateType, Dyn, Dyn>,
-    pub rules: Vec<Rule>,
+    pub rules: Box<dyn Rules>,
     neighbourhood_shape: (usize, usize),
     pub retrieval_mode: RetrievalMode,
     neighbourhood_indices: [OMatrix<i32, Dyn, Dyn>; 2],
@@ -84,7 +82,7 @@ pub struct Engine {
 impl Engine {
     pub fn new(
         grid: OMatrix<CellStateType, Dyn, Dyn>,
-        rules: Vec<Rule>,
+        rules: Box<dyn Rules>,
         neighbourhood_shape: (usize, usize),
         retrieval_mode: RetrievalMode,
     ) -> Result<Engine, String> {
@@ -174,17 +172,8 @@ impl Engine {
         let mut ret = self.grid.clone();
         for i in 0..self.grid.ncols() {
             for j in 0..self.grid.nrows() {
-                let neighbourhood = self.get_neighbourhood((j, i));
-                for rule in &self.rules {
-                    match rule(&neighbourhood, &self.grid[(j, i)]) {
-                        None => {}
-                        Some(val) => {
-                            ret[(j, i)] = val;
-                            break;
-                        }
-                    }
-                    ret[(j, i)] = self.grid[(j, i)];
-                }
+                let neighborhood = self.get_neighbourhood((j, i));
+                ret[(j, i)] = self.rules.step(&neighborhood, self.grid[(j, i)]);
             }
         }
         self.grid = ret;
@@ -195,10 +184,17 @@ impl Engine {
 mod tests {
     use super::*;
 
+    struct DummyRule;
+    impl Rules for DummyRule {
+        fn step(&self, neighborhood: &Neighborhood, current_state: CellStateType) -> CellStateType {
+            current_state
+        }
+    }
+
     #[test]
     fn tets_wrapping_neighborhood() -> Result<(), String> {
         let grid = DMatrix::from_fn(9, 9, |row, col| (row * 10 + col) as CellStateType);
-        let engine = Engine::new(grid, vec![], (3, 3).into(), RetrievalMode::Wrapping)?;
+        let engine = Engine::new(grid, Box::new(DummyRule {}), (3, 3).into(), RetrievalMode::Wrapping)?;
 
         let n = engine.get_neighbourhood((0, 0));
         for i in 0..3 {
