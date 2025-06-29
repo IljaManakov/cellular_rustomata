@@ -1,7 +1,9 @@
 use crate::Neighborhood::{Owned, View};
 use nalgebra::iter::MatrixIter;
 use nalgebra::{Const, DMatrix, Dyn, MatrixView, OMatrix, VecStorage, ViewStorage};
+use rayon::prelude::*;
 use std::fmt::Debug;
+use std::sync::Arc;
 
 pub mod renderer;
 pub mod rulesets;
@@ -60,7 +62,7 @@ impl<'a> Iterator for NeighborhoodIter<'a> {
     }
 }
 
-pub trait Rules {
+pub trait Rules: Send + Sync {
     fn step(&self, neighborhood: &Neighborhood, current_state: CellStateType) -> CellStateType;
 }
 
@@ -72,7 +74,7 @@ pub enum RetrievalMode {
 
 pub struct Engine {
     pub grid: OMatrix<CellStateType, Dyn, Dyn>,
-    pub rules: Box<dyn Rules>,
+    pub rules: Arc<dyn Rules>,
     neighbourhood_shape: (usize, usize),
     pub retrieval_mode: RetrievalMode,
     neighbourhood_indices: [OMatrix<i32, Dyn, Dyn>; 2],
@@ -82,7 +84,7 @@ pub struct Engine {
 impl Engine {
     pub fn new(
         grid: OMatrix<CellStateType, Dyn, Dyn>,
-        rules: Box<dyn Rules>,
+        rules: Arc<dyn Rules>,
         neighbourhood_shape: (usize, usize),
         retrieval_mode: RetrievalMode,
     ) -> Result<Engine, String> {
@@ -169,14 +171,17 @@ impl Engine {
             return;
         }
 
-        let mut ret = self.grid.clone();
-        for i in 0..self.grid.ncols() {
-            for j in 0..self.grid.nrows() {
-                let neighborhood = self.get_neighbourhood((j, i));
-                ret[(j, i)] = self.rules.step(&neighborhood, self.grid[(j, i)]);
-            }
-        }
-        self.grid = ret;
+        let (nrows, ncols) = (self.grid.nrows(), self.grid.ncols());
+        let new_grid: Vec<CellStateType> = (0..nrows * ncols)
+            .into_par_iter()
+            .map(|i| {
+                let (row, col) = self.grid.vector_to_matrix_index(i);
+                let neighborhood = self.get_neighbourhood((row, col));
+                self.rules.step(&neighborhood, self.grid[(row, col)])
+            })
+            .collect();
+
+        self.grid = DMatrix::from_vec(nrows, ncols, new_grid);
     }
 }
 
@@ -194,13 +199,12 @@ mod tests {
     #[test]
     fn tets_wrapping_neighborhood() -> Result<(), String> {
         let grid = DMatrix::from_fn(9, 9, |row, col| (row * 10 + col) as CellStateType);
-        let engine = Engine::new(grid, Box::new(DummyRule {}), (3, 3).into(), RetrievalMode::Wrapping)?;
+        let engine = Engine::new(grid, Arc::new(DummyRule {}), (3, 3).into(), RetrievalMode::Wrapping)?;
 
         let n = engine.get_neighbourhood((0, 0));
         for i in 0..3 {
             for j in 0..3 {
                 let expected: u8 = ((i + 8) % 9) * 10 + (j + 8) % 9;
-                println!("i: {}, j: {}, expected: {}", i, j, expected);
                 assert_eq!(*(n.get((i as usize, j as usize)).expect("")), expected);
             }
         }
@@ -210,8 +214,28 @@ mod tests {
             for j in 0..3 {
                 let expected: u8 = ((i + 7) % 9) * 10 + (j + 7) % 9;
                 let actual: CellStateType = *(n.get((i as usize, j as usize)).expect(""));
-                println!("i: {}, j: {}, expected: {}, actual: {}", i, j, expected, actual);
                 assert_eq!(actual, expected);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn tets_dummy_iteration() -> Result<(), String> {
+        let grid = DMatrix::from_fn(9, 9, |row, col| (row * 10 + col) as CellStateType);
+        let mut engine = Engine::new(
+            grid.clone(),
+            Arc::new(DummyRule {}),
+            (3, 3).into(),
+            RetrievalMode::Wrapping,
+        )?;
+        engine.step();
+        let new_grid = &engine.grid;
+        println!("before:\n{:?}", grid);
+        println!("after:\n{:?}", new_grid);
+        for i in 0..grid.ncols() {
+            for j in 0..grid.nrows() {
+                assert_eq!(grid[(i, j)], new_grid[(i, j)])
             }
         }
         Ok(())
